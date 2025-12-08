@@ -155,7 +155,7 @@ public class GUIManager implements Listener {
                 if (isBlockSelectionGUI) {
                     blockSelectionGUI.handleInventoryClick(event, player);
                 } else if (isFavoritesGUI) {
-                    plugin.getFavoriteGUI().handleInventoryClick(player, event.getSlot(),
+                    plugin.getFavoriteGUI().handleClick(player, event.getSlot(),
                         event.getCurrentItem(), event.isRightClick());
                 }
             }

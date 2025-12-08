@@ -322,10 +322,6 @@ public class BlockSelectionGUI {
         guiConfig.loadConfig();
     }
 
-    private ItemStack createMagicBlock(Material material) {
-        return createMagicBlock(material, null);
-    }
-
     private ItemStack createMagicBlock(Material material, Player player) {
         ItemStack block = new ItemStack(material);
         ItemMeta meta = block.getItemMeta();

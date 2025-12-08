@@ -2,44 +2,47 @@ package io.github.syferie.magicblock.food;
 
 import io.github.syferie.magicblock.MagicBlockPlugin;
 import io.github.syferie.magicblock.api.IMagicFood;
-import io.github.syferie.magicblock.util.Constants;
-
-import org.bukkit.Bukkit;
+import io.github.syferie.magicblock.core.AbstractMagicItem;
+import io.github.syferie.magicblock.util.LoreUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Sound;
 import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
-public class FoodManager implements Listener, IMagicFood {
-    private final MagicBlockPlugin plugin;
-    private final NamespacedKey useTimesKey;
-    private final NamespacedKey maxTimesKey;
-    private final Map<UUID, Integer> foodUses = new HashMap<>();
+/**
+ * 食物管理器 - 重构后仅保留食物特有逻辑
+ *
+ *
+ * @author MagicBlock Team
+ * @version 2.0
+ */
+public class FoodManager extends AbstractMagicItem implements Listener, IMagicFood {
 
+    /**
+     * 构造函数
+     *
+     * @param plugin 插件实例
+     */
     public FoodManager(MagicBlockPlugin plugin) {
-        this.plugin = plugin;
-        this.useTimesKey = new NamespacedKey(plugin, Constants.FOOD_TIMES_KEY);
-        this.maxTimesKey = new NamespacedKey(plugin, "magicfood_maxtimes");
+        super(plugin, "magicfood"); // keyPrefix: magicfood_times, magicfood_maxtimes
     }
+
+    // ==================== 食物创建 ====================
 
     @Override
     public ItemStack createMagicFood(Material material) {
@@ -51,250 +54,197 @@ public class FoodManager implements Listener, IMagicFood {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return null;
 
-        // 获取食物名称
-        String foodName =plugin.getMinecraftLangManager().getItemStackName(item);
+        ConfigurationSection foodSection = plugin.getFoodConfig()
+            .getConfigurationSection("foods." + material.name());
+        if (foodSection == null) return null;
 
-        // 使用配置的名称格式
-        String nameFormat = plugin.getFoodConfig().getString("display.food-name-format", "&b✦ %s &b✦");
+        // 设置显示名称
+        String nameFormat = plugin.getFoodConfig()
+            .getString("display.name-format", "&b✦ %s &b✦");
+        String materialName = plugin.getMinecraftLangManager().getItemStackName(item);
         meta.setDisplayName(ChatColor.translateAlternateColorCodes('&',
-            String.format(nameFormat, foodName)));
+            String.format(nameFormat, materialName)));
 
-        List<String> lore = new ArrayList<>();
-        // 添加特殊标识
-        lore.add(plugin.getFoodConfig().getString("special-lore", "§7MagicFood"));
+        // 添加附魔和隐藏标记
+        meta.addEnchant(Enchantment.DURABILITY, 1, true);
+        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
-        // 添加装饰性lore
-        if (plugin.getFoodConfig().getBoolean("display.decorative-lore.enabled", true)) {
-            ConfigurationSection foodSection = plugin.getFoodConfig().getConfigurationSection("foods." + material.name());
-            if (foodSection != null) {
-                List<String> decorativeLore = plugin.getFoodConfig().getStringList("display.decorative-lore.lines");
-                for (String line : decorativeLore) {
-                    // 替换食物属性变量
-                    line = line.replace("%magicfood_food_level%", String.valueOf(foodSection.getInt("food-level", 0)))
-                             .replace("%magicfood_saturation%", String.valueOf(foodSection.getDouble("saturation", 0.0)))
-                             .replace("%magicfood_heal%", String.valueOf(foodSection.getDouble("heal", 0.0)));
-
-                    // 如果安装了PAPI，处理其他变量
-                    if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
-                        line = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(null, line);
-                    }
-
-                    lore.add(ChatColor.translateAlternateColorCodes('&', line));
-                }
-            }
-        }
-
-        meta.setLore(lore);
+        // 设置使用次数
+        int useTimes = foodSection.getInt("use-times", plugin.getDefaultBlockTimes());
         item.setItemMeta(meta);
+        setUseTimes(item, useTimes);
 
         return item;
     }
 
-    @Override
-    public void setUseTimes(ItemStack item, int times) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
+    // ==================== 食物识别 ====================
 
-        if (times == -1) {
-            int infiniteValue = Integer.MAX_VALUE - 100;
-            meta.getPersistentDataContainer().set(useTimesKey, PersistentDataType.INTEGER, infiniteValue);
-        } else {
-            meta.getPersistentDataContainer().set(useTimesKey, PersistentDataType.INTEGER, times);
+    public boolean isMagicFood(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return false;
         }
 
-        item.setItemMeta(meta);
-    }
+        String specialLore = plugin.getFoodConfig()
+            .getString("special-lore", "§7MagicFood");
+        List<String> lore = item.getItemMeta().getLore();
 
-    public void setMaxUseTimes(ItemStack item, int maxTimes) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
-
-        if (maxTimes == -1) {
-            meta.getPersistentDataContainer().set(maxTimesKey, PersistentDataType.INTEGER, Integer.MAX_VALUE - 100);
-        } else {
-            meta.getPersistentDataContainer().set(maxTimesKey, PersistentDataType.INTEGER, maxTimes);
-        }
-        item.setItemMeta(meta);
+        if (lore == null) return false;
+        return lore.contains(specialLore);
     }
 
     @Override
-    public int decrementUseTimes(ItemStack item) {
-        int currentTimes = getUseTimes(item);
-        if (currentTimes <= 0) {
-            return 0;  // 返回0表示次数已经用尽
-        }
-
-        currentTimes--;
-        setUseTimes(item, currentTimes);
-        return currentTimes;
+    public boolean isMagicItem(ItemStack item) {
+        return isMagicFood(item);
     }
 
     @Override
-    public int getUseTimes(ItemStack item) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return 0;
-
-        PersistentDataContainer container = meta.getPersistentDataContainer();
-        return container.getOrDefault(useTimesKey, PersistentDataType.INTEGER, 0);
+    public String getMagicItemType() {
+        return "FOOD";
     }
 
-    public int getMaxUseTimes(ItemStack item) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return 0;
+    // ==================== 模板方法实现 ====================
 
-        PersistentDataContainer container = meta.getPersistentDataContainer();
-        Integer maxTimes = container.get(maxTimesKey, PersistentDataType.INTEGER);
-        return maxTimes != null ? maxTimes : 0;
+    @Override
+    protected String getMagicLoreIdentifier() {
+        return plugin.getFoodConfig().getString("special-lore", "§7MagicFood");
     }
 
     @Override
-    public void updateLore(ItemStack item, int times) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
+    protected List<String> getDecorativeLore(ItemStack item, Player owner) {
+        List<String> configLore = plugin.getFoodConfig()
+            .getStringList("display.decorative-lore.lines");
 
-        List<String> lore = new ArrayList<>();
+        // 食物特有: 替换食物属性变量
+        ConfigurationSection foodSection = plugin.getFoodConfig()
+            .getConfigurationSection("foods." + item.getType().name());
 
-        // 获取物品的最大使用次数
-        int maxTimes = getMaxUseTimes(item);
-        if (maxTimes <= 0) return;
-
-        // 检查是否是"无限"次数
-        boolean isInfinite = maxTimes == Integer.MAX_VALUE - 100;
-
-        // 添加特殊标识
-        lore.add(plugin.getFoodConfig().getString("special-lore", "§7MagicFood"));
-
-        // 添加装饰性lore
-        if (plugin.getFoodConfig().getBoolean("display.decorative-lore.enabled", true)) {
-            ConfigurationSection foodSection = plugin.getFoodConfig().getConfigurationSection("foods." + item.getType().name());
-            if (foodSection != null) {
-                List<String> decorativeLore = plugin.getFoodConfig().getStringList("display.decorative-lore.lines");
-                for (String line : decorativeLore) {
-                    // 替换食物属性变量
-                    line = line.replace("%magicfood_food_level%", String.valueOf(foodSection.getInt("food-level", 0)))
-                             .replace("%magicfood_saturation%", String.valueOf(foodSection.getDouble("saturation", 0.0)))
-                             .replace("%magicfood_heal%", String.valueOf(foodSection.getDouble("heal", 0.0)));
-
-                    // 如果安装了PAPI，处理其他变量
-                    if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
-                        line = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(null, line);
-                    }
-
-                    lore.add(ChatColor.translateAlternateColorCodes('&', line));
-                }
+        if (foodSection != null) {
+            List<String> processedLore = new ArrayList<>();
+            for (String line : configLore) {
+                line = line.replace("%magicfood_food_level%",
+                        String.valueOf(foodSection.getInt("food-level", 0)))
+                       .replace("%magicfood_saturation%",
+                        String.valueOf(foodSection.getDouble("saturation", 0.0)))
+                       .replace("%magicfood_heal%",
+                        String.valueOf(foodSection.getDouble("heal", 0.0)));
+                processedLore.add(line);
             }
+            configLore = processedLore;
         }
 
-        // 添加使用次数信息
-        if (plugin.getFoodConfig().getBoolean("display.show-info.usage-count", true)) {
-            StringBuilder usageText = new StringBuilder();
-            String usesLabel = plugin.getFoodConfig().getString("display.lore-text.uses-label", "Uses:");
-            String infiniteSymbol = plugin.getFoodConfig().getString("display.lore-text.infinite-symbol", "∞");
-            
-            usageText.append(ChatColor.GRAY).append(usesLabel).append(" ");
-            if (isInfinite) {
-                usageText.append(ChatColor.AQUA).append(infiniteSymbol)
-                        .append(ChatColor.GRAY).append("/")
-                        .append(ChatColor.GRAY).append(infiniteSymbol);
-            } else {
-                usageText.append(ChatColor.AQUA).append(times)
-                        .append(ChatColor.GRAY).append("/")
-                        .append(ChatColor.GRAY).append(maxTimes);
-            }
-            lore.add(usageText.toString());
-        }
-
-        // 添加进度条
-        if (!isInfinite && plugin.getFoodConfig().getBoolean("display.show-info.progress-bar", true)) {
-            StringBuilder progressBar = new StringBuilder();
-            progressBar.append(ChatColor.GRAY).append("[");
-
-            String filledChar = plugin.getFoodConfig().getString("display.lore-text.progress-bar.filled-char", "■");
-            String emptyChar = plugin.getFoodConfig().getString("display.lore-text.progress-bar.empty-char", "□");
-            
-            int barLength = 10;
-            double progress = (double) times / maxTimes;
-            int filledBars = (int) Math.round(progress * barLength);
-
-            for (int i = 0; i < barLength; i++) {
-                if (i < filledBars) {
-                    progressBar.append(ChatColor.GREEN).append(filledChar);
-                } else {
-                    progressBar.append(ChatColor.GRAY).append(emptyChar);
-                }
-            }
-            progressBar.append(ChatColor.GRAY).append("]");
-            lore.add(progressBar.toString());
-        }
-
-        meta.setLore(lore);
-        item.setItemMeta(meta);
+        return LoreUtil.processDecorativeLoreList(configLore, owner);
     }
 
+    @Override
+    protected String getUsageLorePrefix() {
+        return plugin.getFoodConfig()
+            .getString("display.lore-text.uses-label", "Uses:");
+    }
+
+    @Override
+    protected boolean shouldShowBinding() {
+        return false; // 食物不显示绑定信息
+    }
+
+    // ==================== 食物效果应用 ====================
+
+    /**
+     * 应用食物效果 (饱食度、生命值、药水效果、音效、粒子)
+     */
     private void applyFoodEffects(Player player, Material foodType) {
-        ConfigurationSection foodSection = plugin.getFoodConfig().getConfigurationSection("foods." + foodType.name());
+        ConfigurationSection foodSection = plugin.getFoodConfig()
+            .getConfigurationSection("foods." + foodType.name());
         if (foodSection == null) return;
 
-        // 恢复饥饿值
+        // 恢复饥饿值和饱食度
         int foodLevel = foodSection.getInt("food-level", 0);
         float saturation = (float) foodSection.getDouble("saturation", 0.0);
         double heal = foodSection.getDouble("heal", 0.0);
 
-        // 应用饥饿值和饱食度
         int newFoodLevel = Math.min(player.getFoodLevel() + foodLevel, 20);
         player.setFoodLevel(newFoodLevel);
         player.setSaturation(Math.min(player.getSaturation() + saturation, 20.0f));
 
         // 恢复生命值
         if (heal > 0) {
-            // 使用兼容 1.18 的方式获取最大生命值
-            double maxHealth = player.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue();
+            double maxHealth = player.getAttribute(
+                org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue();
             double newHealth = Math.min(player.getHealth() + heal, maxHealth);
             player.setHealth(newHealth);
         }
 
         // 应用药水效果
+        applyPotionEffects(player, foodSection);
+
+        // 播放音效
+        playSoundEffect(player);
+
+        // 显示粒子效果
+        spawnParticleEffect(player);
+    }
+
+    /**
+     * 应用药水效果
+     */
+    private void applyPotionEffects(Player player, ConfigurationSection foodSection) {
         ConfigurationSection effectsSection = foodSection.getConfigurationSection("effects");
-        if (effectsSection != null) {
-            for (String effectName : effectsSection.getKeys(false)) {
-                PotionEffectType effectType = PotionEffectType.getByName(effectName);
-                if (effectType != null) {
-                    ConfigurationSection effectSection = effectsSection.getConfigurationSection(effectName);
-                    if (effectSection != null) {
-                        int duration = effectSection.getInt("duration", 200);
-                        int amplifier = effectSection.getInt("amplifier", 0);
-                        player.addPotionEffect(new PotionEffect(effectType, duration, amplifier));
-                    }
+        if (effectsSection == null) return;
+
+        for (String effectName : effectsSection.getKeys(false)) {
+            PotionEffectType effectType = PotionEffectType.getByName(effectName);
+            if (effectType != null) {
+                ConfigurationSection effectSection = effectsSection
+                    .getConfigurationSection(effectName);
+                if (effectSection != null) {
+                    int duration = effectSection.getInt("duration", 200);
+                    int amplifier = effectSection.getInt("amplifier", 0);
+                    player.addPotionEffect(new PotionEffect(effectType, duration, amplifier));
                 }
             }
         }
+    }
 
-        // 播放音效
-        if (plugin.getFoodConfig().getBoolean("sound.enabled", true)) {
-            String soundName = plugin.getFoodConfig().getString("sound.eat", "ENTITY_PLAYER_BURP");
-            float volume = (float) plugin.getFoodConfig().getDouble("sound.volume", 1.0);
-            float pitch = (float) plugin.getFoodConfig().getDouble("sound.pitch", 1.0);
-            try {
-                Sound sound = Sound.valueOf(soundName);
-                player.playSound(player.getLocation(), sound, volume, pitch);
-            } catch (IllegalArgumentException ignored) {}
-        }
+    /**
+     * 播放音效
+     */
+    private void playSoundEffect(Player player) {
+        if (!plugin.getFoodConfig().getBoolean("sound.enabled", true)) return;
 
-        // 显示粒子效果
-        if (plugin.getFoodConfig().getBoolean("particles.enabled", true)) {
-            String particleType = plugin.getFoodConfig().getString("particles.type", "HEART");
-            int count = plugin.getFoodConfig().getInt("particles.count", 5);
-            double spreadX = plugin.getFoodConfig().getDouble("particles.spread.x", 0.5);
-            double spreadY = plugin.getFoodConfig().getDouble("particles.spread.y", 0.5);
-            double spreadZ = plugin.getFoodConfig().getDouble("particles.spread.z", 0.5);
-            try {
-                Particle particle = Particle.valueOf(particleType);
-                player.getWorld().spawnParticle(particle,
-                    player.getLocation().add(0, 1, 0),
-                    count, spreadX, spreadY, spreadZ);
-            } catch (IllegalArgumentException ignored) {}
+        String soundName = plugin.getFoodConfig().getString("sound.eat", "ENTITY_PLAYER_BURP");
+        float volume = (float) plugin.getFoodConfig().getDouble("sound.volume", 1.0);
+        float pitch = (float) plugin.getFoodConfig().getDouble("sound.pitch", 1.0);
+
+        try {
+            Sound sound = Sound.valueOf(soundName);
+            player.playSound(player.getLocation(), sound, volume, pitch);
+        } catch (IllegalArgumentException e) {
+            plugin.getLogger().warning("Invalid sound: " + soundName);
         }
     }
+
+    /**
+     * 显示粒子效果
+     */
+    private void spawnParticleEffect(Player player) {
+        if (!plugin.getFoodConfig().getBoolean("particles.enabled", true)) return;
+
+        String particleType = plugin.getFoodConfig().getString("particles.type", "HEART");
+        int count = plugin.getFoodConfig().getInt("particles.count", 5);
+        double spreadX = plugin.getFoodConfig().getDouble("particles.spread.x", 0.5);
+        double spreadY = plugin.getFoodConfig().getDouble("particles.spread.y", 0.5);
+        double spreadZ = plugin.getFoodConfig().getDouble("particles.spread.z", 0.5);
+
+        try {
+            Particle particle = Particle.valueOf(particleType);
+            player.getWorld().spawnParticle(particle,
+                player.getLocation().add(0, 1, 0),
+                count, spreadX, spreadY, spreadZ);
+        } catch (IllegalArgumentException e) {
+            plugin.getLogger().warning("Invalid particle: " + particleType);
+        }
+    }
+
+    // ==================== 食物消耗事件处理 ====================
 
     @EventHandler
     public void onPlayerEat(PlayerItemConsumeEvent event) {
@@ -311,64 +261,53 @@ public class FoodManager implements Listener, IMagicFood {
             return;
         }
 
-        // 创建物品的副本以避免并发修改问题
+        // 创建物品副本
         ItemStack item = originalItem.clone();
 
-        // 检查当前使用次数
+        // 检查使用次数
         int currentTimes = getUseTimes(item);
         if (currentTimes <= 0) {
-            // 在 1.18 中，消耗物品总是在主手进行的
             removeItemFromHand(player, EquipmentSlot.HAND);
             return;
         }
 
         // 应用食物效果
         applyFoodEffects(player, item.getType());
-        plugin.getStatistics().logFoodUse(player, item);
+        if (plugin.getStatistics() != null) {
+            plugin.getStatistics().logFoodUse(player, item);
+        }
 
-        // 减少使用次数
-        currentTimes--;
+        // 减少使用次数 (基类处理)
+        currentTimes = decrementUseTimes(item);
 
-        // 更新物品状态
+        // 更新手持物品
         if (currentTimes <= 0) {
-            // 在 1.18 中，消耗物品总是在主手进行的
             removeItemFromHand(player, EquipmentSlot.HAND);
             plugin.sendMessage(player, "messages.food-removed");
         } else {
-            setUseTimes(item, currentTimes);
-            updateLore(item, currentTimes);
-            // 在 1.18 中，消耗物品总是在主手进行的
-            updateItemInHand(player, EquipmentSlot.HAND, item);
+            updateItemInHand(player, item, EquipmentSlot.HAND);
         }
     }
 
-    private void removeItemFromHand(Player player, EquipmentSlot hand) {
-        if (hand == EquipmentSlot.HAND) {
+    /**
+     * 移除手持物品
+     */
+    private void removeItemFromHand(Player player, EquipmentSlot slot) {
+        if (slot == EquipmentSlot.HAND) {
             player.getInventory().setItemInMainHand(null);
-        } else if (hand == EquipmentSlot.OFF_HAND) {
+        } else {
             player.getInventory().setItemInOffHand(null);
         }
     }
 
-    private void updateItemInHand(Player player, EquipmentSlot hand, ItemStack item) {
-        if (hand == EquipmentSlot.HAND) {
+    /**
+     * 更新手持物品
+     */
+    private void updateItemInHand(Player player, ItemStack item, EquipmentSlot slot) {
+        if (slot == EquipmentSlot.HAND) {
             player.getInventory().setItemInMainHand(item);
-        } else if (hand == EquipmentSlot.OFF_HAND) {
+        } else {
             player.getInventory().setItemInOffHand(item);
         }
-    }
-
-    @Override
-    public boolean isMagicFood(ItemStack item) {
-        if (item != null && item.hasItemMeta()) {
-            ItemMeta meta = item.getItemMeta();
-            String specialLore = plugin.getFoodConfig().getString("special-lore", "§7MagicFood");
-            return meta.hasLore() && meta.getLore().contains(specialLore);
-        }
-        return false;
-    }
-
-    public int getFoodUses(UUID playerUUID) {
-        return foodUses.getOrDefault(playerUUID, 0);
     }
 }

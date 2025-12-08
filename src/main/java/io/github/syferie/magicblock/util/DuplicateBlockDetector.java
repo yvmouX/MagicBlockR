@@ -121,14 +121,10 @@ public class DuplicateBlockDetector implements Listener {
                 }
             }
         }
-        
-        // 性能监控
-        long duration = (System.nanoTime() - startTime) / 1_000_000; // 转换为毫秒
-        plugin.getPerformanceMonitor().recordDuplicateCheck(duration);
-        
+
         plugin.debug(String.format(
-            "重复检测完成 - 耗时: %dms, 检查玩家数: %d (包括自己), 移除重复: %d (仅检测背包)",
-            duration, Bukkit.getOnlinePlayers().size(), duplicatesRemovedInThisCheck
+            "重复检测完成 - 检查玩家数: %d (包括自己), 移除重复: %d (仅检测背包)",
+            Bukkit.getOnlinePlayers().size(), duplicatesRemovedInThisCheck
         ));
     }
     

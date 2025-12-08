@@ -4,16 +4,15 @@ import com.tcoded.folialib.FoliaLib;
 import io.github.syferie.magicblock.block.BlockManager;
 import io.github.syferie.magicblock.command.CommandManager;
 import io.github.syferie.magicblock.command.handler.TabCompleter;
+import io.github.syferie.magicblock.config.ConfigCache;
 import io.github.syferie.magicblock.database.DatabaseManager;
 import io.github.syferie.magicblock.food.FoodManager;
-import io.github.syferie.magicblock.food.FoodService;
 import io.github.syferie.magicblock.hook.PlaceholderHook;
 import io.github.syferie.magicblock.listener.BlockListener;
 import io.github.syferie.magicblock.metrics.Metrics;
 import io.github.syferie.magicblock.util.MinecraftLangManager;
 import io.github.syferie.magicblock.util.Statistics;
 import io.github.syferie.magicblock.util.LanguageManager;
-import io.github.syferie.magicblock.util.PerformanceMonitor;
 import io.github.syferie.magicblock.block.BlockBindManager;
 import io.github.syferie.magicblock.util.UpdateChecker;
 import io.github.syferie.magicblock.manager.MagicBlockIndexManager;
@@ -55,7 +54,6 @@ public class MagicBlockPlugin extends JavaPlugin {
     private BlockBindManager blockBindManager;
     private List<String> blacklistedWorlds;
     private FoodManager magicFood;
-    private FoodService foodService;
     private FileConfiguration foodConfig;
     private Statistics statistics;
     private final HashMap<UUID, Integer> playerUsage = new HashMap<>();
@@ -64,7 +62,6 @@ public class MagicBlockPlugin extends JavaPlugin {
     private MinecraftLangManager minecraftLangManager;
     private FoliaLib foliaLib;
     private DatabaseManager databaseManager;
-    private PerformanceMonitor performanceMonitor;
     private MagicBlockIndexManager indexManager;
     private DuplicateBlockDetector duplicateDetector;
     private FavoriteManager favoriteManager;
@@ -72,17 +69,18 @@ public class MagicBlockPlugin extends JavaPlugin {
     private GUIManager guiManager;
     private ItemCreator itemCreator;
     private DataMigrationManager dataMigrationManager;
+    private ConfigCache configCache;
 
     @Override
     public void onEnable() {
         // 初始化语言管理器
         this.languageManager = new LanguageManager(this);
 
-        // 初始化性能监控器
-        this.performanceMonitor = new PerformanceMonitor(this);
-
         // 初始化配置
         initializeConfig();
+
+        // 性能优化：初始化配置缓存
+        this.configCache = new ConfigCache(this);
 
         try {
             // 初始化FoliaLib
@@ -117,9 +115,6 @@ public class MagicBlockPlugin extends JavaPlugin {
         if(getConfig().getBoolean("enable-statistics")) {
             statistics = new Statistics(this);
         }
-
-        // 初始化食物服务
-        this.foodService = new FoodService(this);
 
         saveDefaultConfig();
         checkAndUpdateConfig("config.yml", true);
@@ -385,10 +380,6 @@ public class MagicBlockPlugin extends JavaPlugin {
         return magicFood;
     }
 
-    public FoodService getFoodService() {
-        return this.foodService;
-    }
-
     public String getMagicLore() {
         return ChatColor.translateAlternateColorCodes('&', getConfig().getString("magic-lore", "&e⚡ &7MagicBlock"));
     }
@@ -578,13 +569,13 @@ public class MagicBlockPlugin extends JavaPlugin {
         // 8. 重载统计系统（如果启用）
         reloadStatistics();
 
-        // 9. 重载性能监控配置
-        if (performanceMonitor != null) {
-            // 性能监控器的配置会在下次使用时自动读取最新配置
-            getLogger().info("✓ 性能监控配置已重载");
+        // 🚀 性能优化：重载配置缓存
+        if (configCache != null) {
+            configCache.reload();
+            getLogger().info("✓ 配置缓存已重载");
         }
 
-        // 10. 重载魔法方块索引管理器
+        // 9. 重载魔法方块索引管理器
         if (indexManager != null) {
             indexManager.reload();
             getLogger().info("✓ 魔法方块索引已重载");
@@ -790,10 +781,6 @@ public class MagicBlockPlugin extends JavaPlugin {
         return statistics;
     }
 
-    public PerformanceMonitor getPerformanceMonitor() {
-        return performanceMonitor;
-    }
-
     public MagicBlockIndexManager getIndexManager() {
         return indexManager;
     }
@@ -824,5 +811,9 @@ public class MagicBlockPlugin extends JavaPlugin {
 
     public DataMigrationManager getDataMigrationManager() {
         return dataMigrationManager;
+    }
+
+    public ConfigCache getConfigCache() {
+        return configCache;
     }
 }

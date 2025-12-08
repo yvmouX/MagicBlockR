@@ -20,13 +20,6 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 魔法方块索引管理器
  * 实现高性能的魔法方块位置索引和查找
- *
- * 性能优化策略：
- * 1. 内存索引：O(1) 快速查找
- * 2. 区块缓存：减少内存使用
- * 3. 持久化存储：数据安全保障
- * 4. 智能过滤：早期事件过滤
- * 5. 区块加载时自动恢复：解决重启后数据丢失问题
  */
 public class MagicBlockIndexManager implements Listener {
     private final MagicBlockPlugin plugin;

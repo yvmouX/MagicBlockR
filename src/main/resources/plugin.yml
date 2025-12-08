@@ -1,5 +1,5 @@
 name: MagicBlock
-version: '3.2.0.1'
+version: '3.2.1.0'
 main: io.github.syferie.magicblock.MagicBlockPlugin
 api-version: '1.18'
 authors: [Syferie]
@@ -27,7 +27,6 @@ permissions:
       magicblock.addtimes: true
       magicblock.getfood: true
       magicblock.list: true
-      magicblock.performance: true
   magicblock.use:
     description: Allows placing and interacting with MagicBlocks (does not include breaking)
     default: true
@@ -55,6 +54,3 @@ permissions:
   magicblock.list:
     description: Allows viewing bound blocks list
     default: true
-  magicblock.performance:
-    description: Allows viewing plugin performance reports
-    default: op

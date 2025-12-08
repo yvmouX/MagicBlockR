@@ -43,22 +43,7 @@ public class PlaceholderHook extends PlaceholderExpansion {
             return String.valueOf(plugin.getPlayerUsage(player.getUniqueId()));
         }
 
-        // 获取玩家使用魔法食物的总次数
-        if (params.equalsIgnoreCase("food_uses")) {
-            if (plugin.getMagicFood() != null) {
-                return String.valueOf(plugin.getMagicFood().getFoodUses(player.getUniqueId()));
-            }
-            return "0";
-        }
-
-        // 魔法食物相关占位符
-        if (params.equalsIgnoreCase("magicfood_food_uses")) {
-            if (plugin.getMagicFood() != null) {
-                return String.valueOf(plugin.getMagicFood().getFoodUses(player.getUniqueId()));
-            }
-            return "0";
-        }
-
+        // 魔法食物 - 手持物品的剩余使用次数
         if (params.equalsIgnoreCase("magicfood_remaining_uses")) {
             try {
                 if (player.isOnline() && player.getPlayer() != null && plugin.getMagicFood() != null) {

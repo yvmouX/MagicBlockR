@@ -4,14 +4,13 @@ plugins {
 }
 
 group 'io.github.syferie.magicblock'
-version '3.2.0.1'
+version '3.2.1.0'
 
 repositories {
     mavenCentral()
     maven { url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
     maven { url 'https://repo.extendedclip.com/releases/' }
     maven { url 'https://repo.papermc.io/repository/maven-public/' }
-    maven { url 'https://maven.chengzhimeow.cn/releases/' }
     maven {
         name = "tcoded-releases"
         url = "https://repo.tcoded.com/releases"
